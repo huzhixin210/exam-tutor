@@ -91,10 +91,7 @@
    c. 用 3-5 行汇报：分数、最弱的 2-3 个考点（看 `transitions` 里分最低的）、下次复习日。
 5. `exam_status({})` → 进度、考点数、平均掌握度、最该复习的队列。用户问「我最近学得怎么样」时用它。
 6. 一天结束调 `exam_review({})` → 生成/合并当日复盘文件。
-7. 如果用户给了一个题库服务器（形如 `http://1.2.3.4:9120` 和令牌），先同步题库再出题：
-   `exam_bank_sync({"dry_run": true})` 看要下什么 → `exam_bank_sync({})` 真下。
-   令牌走环境变量 `EXAM_BANK_TOKEN`，地址可以用 `hermes config set plugins.entries.exam-tutor.settings.bank_url`。
-   没配就跳过，用本地题库。
+7. 如果用户给了题库服务器地址和令牌，先同步题库再出题 —— 见下面第 5.5 节。没给就跳过，用本地题库。
 8. 用户要看全貌时调 `exam_export({"kind": "all"})`
    → 生成三份人读 Markdown（`掌握度看板.md`、`错题速览.md`、`今日待复习.md`）到 `<workspace>/导出/`，
    并把返回的 `markdown` **节选关键几行贴进聊天**。
@@ -111,6 +108,55 @@
 - 错题重做必须换壳（换问法/换选项/换情境），不要原题重刷。
 - **服务器部署时，产出必须在回复里贴出来**：分数、逐题对错、错题抓手、待复习清单，不许只说"已写入 xx 文件"——用户看不到服务器的磁盘。
 - 判断题（`qtype: 判断`，答案 `√`/`×`）已经自动规范化成 A=正确 / B=错误，组卷会正常出，判分时用户答 `√` 或 `A` 都算对。不需要额外处理。
+
+## 5.5 题库同步（用户给了题库服务器时）
+
+题库可以放在对方自己的服务器上（一套 `exam-bank` 服务），**你自己不该手传题库**，让它拉。
+
+用户会给你两个东西：**地址**（形如 `http://1.2.3.4:9120`）和**令牌**（32 位十六进制）。
+不要把这俩写进任何会被提交的文件（`docs/`、README、技能），令牌只放 `.env` 或环境变量。
+
+### 步骤
+
+1. **先确认服务器活着**（不通就别往下走）：
+
+       curl -s --max-time 10 http://<地址>/healthz      # 期望 {"ok": true}
+       curl -s --max-time 10 -H "Authorization: Bearer <令牌>" \
+            http://<地址>/manifest.json                  # 期望一个含 files 的 JSON
+
+   常见结果：
+   - `http: 000` / 超时 → 服务器安全组没放行端口，让用户在云控制台添加 TCP 9120
+   - `401` → 令牌不对
+   - `404 manifest not published yet` → 对方还没发布过题库
+
+2. **记住地址**（令牌不进配置文件）：
+
+       hermes config set plugins.entries.exam-tutor.settings.bank_url "http://<地址>"
+       # 令牌写进 .env：EXAM_BANK_TOKEN=<令牌>   （config.yaml 是设置文件，不是密码本）
+
+   不想改配置也行，每次调用工具时把 `url` 当参数传。
+
+3. **同步**（工具要下个会话才出现，当前会话用脚本）：
+
+       python src/sync_bank.py --dry-run          # 只看要下什么
+       python src/sync_bank.py                    # 真下（只下 sha256 变了的）
+
+   或插件工具：`exam_bank_sync({"dry_run": true})` → `exam_bank_sync({})`。
+   返回里 `downloaded` 是这次拿到的文件，`unchanged` 是已是同版的，`failed` 必须为空。
+   **有 `failed` 就逐条告诉用户，不要当成成功。**
+
+4. **验证**：`exam_status({})` 的 `题库` 字段应列出刚同步的文件；然后 `exam_quiz({"chapter":"第六章"})`
+   能出题就说明对上了。同步到别人的 workspace 时注意：题库只共享题目内容，
+   `已做.json`（个人刷题记录）不会被下发，所以对方不会"跳过你做过的题"。
+
+5. **对方更新题库后**再跑一次同样的命令即可，只传变动文件；`--prune` 会删掉本地有、服务器没有的题库文件
+   （默认不删）。
+
+### 对方怎么更新题库（如果他就是题库提供者）
+
+       python tools/publish_bank.py --url http://<地址> --token <令牌> --dir "<题库目录>"
+
+只上传 sha256 变了的文件，最后更新清单。`--dry-run` 先看要传什么。
 
 ## 6. 规则从哪读
 
@@ -157,6 +203,10 @@
 | `repository not found` | 拼错路径或网络不通 | 路径必须 `huzhixin210/exam-tutor/plugin`；先 `git ls-remote` 测连通 |
 | 判断题不出/被跳过 | 插件版本 < 1.1.0（无判断题规范化） | `hermes plugins update exam-tutor`，`hermes plugins list` 应显示 1.1.0 |
 | 用户说"我打不开文件" | Hermes 在服务器上 | 按第 7.5 节：先回显，再 `exam_export` |
+| 题库同步 `http: 000`/超时 | 服务器安全组没放行端口 | 让用户在云控制台加 TCP 9120 规则 |
+| 题库同步 `401` | 令牌错 | 找题库提供者要 `/srv/exam-bank/token.txt` 里的值 |
+| 题库同步 `404 manifest` | 对方没发布过题库 | 让对方跑 `tools/publish_bank.py` |
+| 同步后出题报 `[缺题库]` | 只同步了部分/章节名对不上 | 看 `exam_status` 的题库列表，章节名必须与文件名一致 |
 
 ## 9. 兜底：不装插件也能用
 
