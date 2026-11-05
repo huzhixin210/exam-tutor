@@ -31,6 +31,10 @@ python src/make_quiz.py 第一章 10
 
 环境：Python 3.8+，**零第三方依赖**（标准库即可）。
 
+## 让别的 Hermes 自己装
+
+把 [`docs/给Hermes的提示词.md`](docs/给Hermes的提示词.md) 整段粘给朋友的 Hermes，它会自己完成体检、安装、验证和演示。
+
 ## 方式二：装成 Hermes 插件（一条命令）
 
 ```bash
