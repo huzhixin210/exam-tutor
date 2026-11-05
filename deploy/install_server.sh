@@ -9,7 +9,9 @@ RAW=https://raw.githubusercontent.com/huzhixin210/exam-tutor/main/deploy/bank_se
 PORT="${PORT:-9120}"
 
 command -v python3 >/dev/null || { echo "缺 python3"; exit 1; }
+RUN_USER="${SUDO_USER:-ubuntu}"
 mkdir -p "$DIR/data"
+chown -R "$RUN_USER":"$RUN_USER" "$DIR"      # 服务以 ubuntu 身份写题库，目录必须归它
 
 echo "== 下载服务端脚本 =="
 curl -fsSL "$RAW" -o "$DIR/bank_server.py"
@@ -33,7 +35,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
+User=$RUN_USER
 WorkingDirectory=$DIR
 Environment=EXAM_BANK_TOKEN=$TOKEN
 Environment=EXAM_BANK_PORT=$PORT
