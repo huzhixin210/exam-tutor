@@ -21,6 +21,7 @@ import argparse, glob, json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
+import judgenorm
 
 DEFAULT_ROOT = config.root()
 
@@ -31,9 +32,9 @@ def load_bank(path):
     if isinstance(d, dict):
         for k in ("questions", "items", "data"):
             if k in d:
-                return d[k]
-        return list(d.values())[0] if d else []
-    return d
+                return judgenorm.norm_all(d[k])
+        return judgenorm.norm_all(list(d.values())[0] if d else [])
+    return judgenorm.norm_all(d)
 
 
 def opts_text(q):

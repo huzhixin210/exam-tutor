@@ -10,6 +10,7 @@ import json, os, re, sys, datetime, random
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
+import judgenorm
 
 BASE = os.path.join(config.root(), "做题系统")
 QB = os.path.join(BASE, "题库")
@@ -24,7 +25,7 @@ def load(fn):
     if isinstance(d, dict):
         for k in ("questions","items","data"):
             if k in d: d = d[k]; break
-    return d
+    return judgenorm.norm_all(d or [])
 
 def norm(s): return re.sub(r"[\s\W]+", "", str(s or ""))
 

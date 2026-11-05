@@ -18,11 +18,21 @@ CAP_NO_EVIDENCE = 84
 
 
 # ---------------------------------------------------------------- 判对错 ----
+_TRUE_WORDS = {"√", "对", "正确", "是", "T", "TRUE", "1"}
+_FALSE_WORDS = {"×", "x", "X", "错", "错误", "否", "F", "FALSE", "0"}
+_TRUE_CHARS = str.maketrans({"√": "A", "对": "A", "×": "B", "错": "B"})
+
+
 def norm_answer(a):
-    """多选答案规范化：去空格/逗号/顿号，转大写，按字母排序（顺序无关）。"""
+    """答案规范化：判断题符号(√/×)与 A/B 等价；多选去空格/逗号、转大写、按字母排序。"""
     if a is None:
         return ""
-    s = str(a)
+    s = str(a).strip()
+    if s.upper() in _TRUE_WORDS:
+        return "A"
+    if s.upper() in _FALSE_WORDS:
+        return "B"
+    s = s.translate(_TRUE_CHARS)
     for ch in (" ", "\t", ",", "，", "、", "|", "/"):
         s = s.replace(ch, "")
     s = s.upper()
