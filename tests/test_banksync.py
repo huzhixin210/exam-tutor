@@ -50,10 +50,11 @@ class TestManifest(unittest.TestCase):
 
 
 class TestPersonalState(unittest.TestCase):
-    def test_done_record_never_shared(self):
+    def test_personal_files_never_shared(self):
         import banksync as b
-        self.assertFalse(b.is_safe_name("已做.json"))
-        self.assertTrue(b.is_safe_name("弃用.json"))   # 质量黑名单是共享内容
+        for name in ("已做.json", "弃用.json", "进度.json", "掌握度.json"):
+            self.assertFalse(b.is_safe_name(name), name)
+        self.assertTrue(b.is_safe_name("6600_第七章.json"))
 
     def test_manifest_skips_done_record(self):
         d = tempfile.mkdtemp()

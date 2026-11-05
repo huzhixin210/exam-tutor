@@ -13,10 +13,11 @@ import os
 
 MANIFEST_NAME = "manifest.json"
 
-# 只共享"内容"，不共享"个人状态"：
-#   已做.json 是每个人自己的刷题记录，传过去会让别人整批跳过我做过的题
-#   弃用.json 是题目质量黑名单，对所有人一致，所以保留共享
-EXCLUDE = {"已做.json", "进度.json", "manifest.json"}
+# 只共享"原始题库"（纯题目文件），其余一律不上传：
+#   已做.json   个人刷题记录（传过去会让别人整批跳过我做过的题）
+#   弃用.json   个人维护的作废名单（属个人数据）
+#   进度/掌握度 本就是各自的私人进度
+EXCLUDE = {"已做.json", "弃用.json", "进度.json", "掌握度.json", "manifest.json"}
 
 
 def sha256_file(path, chunk=1 << 20):
