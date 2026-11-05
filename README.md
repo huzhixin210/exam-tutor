@@ -31,6 +31,17 @@ python src/make_quiz.py 第一章 10
 
 环境：Python 3.8+，**零第三方依赖**（标准库即可）。
 
+## 方式二：装成 Hermes 插件（一条命令）
+
+```bash
+hermes plugins install huzhixin210/exam-tutor/plugin
+hermes plugins enable exam-tutor
+```
+
+装完会多出四个工具（`exam_quiz` / `exam_grade` / `exam_status` / `exam_review`）和配套技能
+`exam-tutor:exam-tutor`。判分、掌握度、错题本、复盘全部由代码完成，AI 只负责讲解和换壳——
+比纯技能模式少一半出错机会。详见 `plugin/README.md`。
+
 ## 目录结构
 
 ```
@@ -47,6 +58,8 @@ exam-tutor/
 │   ├── pick_questions.py      按关键词临时找题（省 token）
 │   ├── build_daily_review.py  生成/合并当日错题复盘
 │   └── migrate_decay.py       旧掌握度数据迁移到衰减模型
+├── plugin/                    Hermes 插件（自带一份 engine/ 与 template/）
+├── tools/sync_plugin.py       把 src/ 同步进 plugin/engine/
 ├── template/                  空模板 + 12 道示例题（MIT）
 ├── tests/test_decay.py        衰减算法单元测试（27 个用例）
 └── docs/                      设计说明、数据格式、AI 接入
@@ -81,6 +94,7 @@ exam-tutor/
 
 - [x] 组卷 / 衰减 / 复盘脚本（命令行走通）
 - [x] AI 无关的规则层（AGENTS.md + SKILL.md）
+- [x] Hermes 插件（工具化：组卷/判分/状态/复盘 + 斜杠命令）
 - [ ] 本地网页版（浏览器做题，手机同 WiFi 可用）
 - [ ] 题库导入工具（PDF / 图片 → JSON，OCR）
 
