@@ -52,9 +52,18 @@ systemctl daemon-reload
 timeout 60 systemctl enable --now exam-bank || echo "(enable 有告警，不影响使用)"
 sleep 1
 
-if command -v ufw >/dev/null && ufw status | grep -qi active; then
-  ufw allow "$PORT"/tcp || true
+# 系统防火墙：ufw 开着就必须单独放行，云控制台的"安全组/防火墙"管不到这一层
+if command -v ufw >/dev/null && ufw status | grep -qi "Status: active"; then
+  if ufw allow "$PORT"/tcp comment "exam-bank" 2>/dev/null; then
+    echo "== 已放行 ufw $PORT/tcp =="
+  else
+    echo "⚠ ufw 放行失败，请手动执行: sudo ufw allow $PORT/tcp"
+  fi
+else
+  echo "== ufw 未启用，跳过 =="
 fi
+
+# 有些机器用自定义 iptables 链（如云厂商 agent），INPUT 默认 DROP；上面 ufw 规则已覆盖常规情况
 
 IP=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 echo
@@ -69,7 +78,8 @@ echo " 状态 : systemctl status exam-bank --no-pager"
 echo " 下一步（在你自己的电脑上）："
 echo "   python tools/publish_bank.py --url http://$IP:$PORT --token $TOKEN --dir \"<你的题库目录>\""
 echo
-echo " ⚠ 云厂商安全组还要放行 TCP $PORT，否则外网连不上"
+echo " ⚠ 两层防火墙都要放行：①系统 ufw（上面已自动加）②云控制台安全组/防火墙"
+echo "   验证：在你自己电脑上 curl http://$IP:$PORT/healthz 应返回 {\"ok\": true}"
 echo "=================================================="
 
 echo

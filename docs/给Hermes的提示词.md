@@ -203,7 +203,8 @@
 | `repository not found` | 拼错路径或网络不通 | 路径必须 `huzhixin210/exam-tutor/plugin`；先 `git ls-remote` 测连通 |
 | 判断题不出/被跳过 | 插件版本 < 1.1.0（无判断题规范化） | `hermes plugins update exam-tutor`，`hermes plugins list` 应显示 1.1.0 |
 | 用户说"我打不开文件" | Hermes 在服务器上 | 按第 7.5 节：先回显，再 `exam_export` |
-| 题库同步 `http: 000`/超时 | 服务器安全组没放行端口 | 让用户在云控制台加 TCP 9120 规则 |
+| 题库同步 `http: 000`/超时 | **两层**防火墙任一没放行：①服务器系统 ufw ②云控制台安全组 | 服务器上 `sudo ufw allow 9120/tcp`；云控制台加 TCP 9120 入站规则 |
+| 开了本地代理导致超时 | Clash 等系统代理拦了非标准端口 | `curl --noproxy '*'` 或把该 IP 加进直连白名单 |
 | 题库同步 `401` | 令牌错 | 找题库提供者要 `/srv/exam-bank/token.txt` 里的值 |
 | 题库同步 `404 manifest` | 对方没发布过题库 | 让对方跑 `tools/publish_bank.py` |
 | 同步后出题报 `[缺题库]` | 只同步了部分/章节名对不上 | 看 `exam_status` 的题库列表，章节名必须与文件名一致 |
