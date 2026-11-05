@@ -31,13 +31,13 @@
 ## 2. 验证（三条都要过）
 
     hermes plugins list                    # exam-tutor 那行必须是 enabled
-    hermes plugins doctor exam-tutor       # 必须出现: registrations: 4 tool(s)
+    hermes plugins doctor exam-tutor       # 必须出现: registrations: 5 tool(s)
     hermes plugins validate huzhixin210/exam-tutor/plugin   # 可选，应显示 Validation passed
 
-关键：**四个工具（exam_quiz / exam_grade / exam_status / exam_review）只在下一个会话才出现**，因为工具列表在会话启动时固定。所以如果本会话刚装完，请告诉用户：「装好了，开一个新会话（或重启 Hermes）工具才生效」，不要假装自己现在能调它们。
+关键：**五个工具（exam_quiz / exam_grade / exam_status / exam_review / exam_export）只在下一个会话才出现**，因为工具列表在会话启动时固定。所以如果本会话刚装完，请告诉用户：「装好了，开一个新会话（或重启 Hermes）工具才生效」，不要假装自己现在能调它们。
 
 技能 `exam-tutor:exam-tutor` 可以立刻用 `skill_view("exam-tutor:exam-tutor")` 读到。
-如果 doctor 只报 0 tool(s)，说明注册失败：把 `hermes plugins doctor exam-tutor` 的完整输出发给用户看，并按第 9 节兜底。
+如果 doctor 报的 tool 数不是 5（0 或者其他数字），说明注册失败：把 `hermes plugins doctor exam-tutor` 的完整输出发给用户看，并按第 9 节兜底。
 
 ## 3. 数据目录
 
@@ -91,6 +91,9 @@
    c. 用 3-5 行汇报：分数、最弱的 2-3 个考点（看 `transitions` 里分最低的）、下次复习日。
 5. `exam_status({})` → 进度、考点数、平均掌握度、最该复习的队列。用户问「我最近学得怎么样」时用它。
 6. 一天结束调 `exam_review({})` → 生成/合并当日复盘文件。
+7. 用户要看全貌时调 `exam_export({"kind": "all"})`
+   → 生成三份人读 Markdown（`掌握度看板.md`、`错题速览.md`、`今日待复习.md`）到 `<workspace>/导出/`，
+   并把返回的 `markdown` **节选关键几行贴进聊天**。
 
 ## 5. 使用中的硬纪律（违反会污染用户数据）
 
@@ -102,6 +105,8 @@
 - 判分前如果 `answer_missing` 为真（题库没答案），停下，先去题库把 `answer` 补上，不要猜答案判分。
 - 作废题（教材异版/超纲）处理后，除了告诉用户，还要把题目 id 追加进 `题库/弃用.json`，否则下一批还会抽到它。
 - 错题重做必须换壳（换问法/换选项/换情境），不要原题重刷。
+- **服务器部署时，产出必须在回复里贴出来**：分数、逐题对错、错题抓手、待复习清单，不许只说"已写入 xx 文件"——用户看不到服务器的磁盘。
+- 判断题（`qtype: 判断`，答案 `√`/`×`）已经自动规范化成 A=正确 / B=错误，组卷会正常出，判分时用户答 `√` 或 `A` 都算对。不需要额外处理。
 
 ## 6. 规则从哪读
 
@@ -123,6 +128,18 @@
 - 每做完 3 批主动提醒一句「可以开新会话继续说『继续做题』，省钱」。
 - 汇报不要复述整份文件，只说分数、最弱考点、下一步。
 
+## 7.5 服务器版 Hermes：用户看不到文件怎么办
+
+如果这台 Hermes 跑在服务器上（`workspace` 在远端磁盘，用户用桌面端/手机连），记住三条：
+
+1. **绝不"只写文件不汇报"** —— 见第 5 节第一条。
+2. 需要归档/长期翻看时用 `exam_export`（或脚本 `python src/export.py`）生成 `<workspace>/导出/*.md`。
+3. 要同步给本地，**只同步 `导出/` 这一层人读 Markdown**（Syncthing send-only、Obsidian Git、rclone 都行），
+   **绝对不要把 `题库/` 和 `掌握度.json` 双向同步**——JSON 手改一次就坏，双向同步必冲突。
+   Obsidian 用户把本地目标目录放进 vault 即可自动读；Obsidian 官方 Sync 不支持无头 Linux 服务器端，别走那条路。
+
+用户明确说过不需要同步设施（只用回显）时，就别主动推荐装 Syncthing。
+
 ## 8. 常见报错对照
 
 | 现象 | 原因 | 处置 |
@@ -131,9 +148,11 @@
 | `没有 当前批次.json，先 exam_quiz` | 没出卷就判分 | 先 `exam_quiz` |
 | `题库里有题缺 answer` | 题目字段不全 | 补 `answer` 后再判，禁止猜 |
 | `考点「X」匹配到多个键` | 同名考点跨节重复 | 问用户考的是哪一节，禁止擅自挑 |
-| `4 tool(s)` 变成 `0 tool(s)` | 注册失败 | 发 `hermes plugins doctor` 输出；按第 9 节兜底 |
+| tool 数不是 5（0 或其他） | 注册失败/版本不符 | 发 `hermes plugins doctor` 输出；按第 9 节兜底 |
 | 装插件报 schannel | Windows + 代理 | `export GIT_SSL_BACKEND=openssl` 后重试 |
 | `repository not found` | 拼错路径或网络不通 | 路径必须 `huzhixin210/exam-tutor/plugin`；先 `git ls-remote` 测连通 |
+| 判断题不出/被跳过 | 旧版插件（≤ v1.0.0 早期）没有规范化 | `hermes plugins update exam-tutor` 升到含 `judgenorm.py` 的版本 |
+| 用户说"我打不开文件" | Hermes 在服务器上 | 按第 7.5 节：先回显，再 `exam_export` |
 
 ## 9. 兜底：不装插件也能用
 
