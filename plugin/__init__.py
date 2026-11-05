@@ -29,6 +29,7 @@ sys.path.insert(0, str(_ENGINE))
 try:
     import config as _config          # noqa: F401
     import decay as _decay
+    import export as _export
     import grade as _grade
 finally:
     try:
@@ -293,6 +294,45 @@ def exam_review(args: dict, **kwargs) -> str:
                       ensure_ascii=False)
 
 
+EXPORT_KINDS = {"all": ("掌握度看板.md", "错题速览.md", "今日待复习.md"),
+                "看板": ("掌握度看板.md",), "错题": ("错题速览.md",), "待复习": ("今日待复习.md",)}
+
+
+def exam_export(args: dict, **kwargs) -> str:
+    """导出人读 Markdown 视图（给 Obsidian / 手机 / 聊天窗口看）。"""
+    root = _root(kwargs.get("ctx"))
+    sysd = _sysd(root)
+    kind = str(args.get("kind") or "all")
+    if kind not in EXPORT_KINDS:
+        return json.dumps({"ok": False, "error": f"kind 只能是 {list(EXPORT_KINDS)}"}, ensure_ascii=False)
+    today = _grade._as_date(args.get("date")) or datetime.date.today()
+    mastery = _load_json(sysd / "掌握度.json", {"章节": {}})
+    progress = _load_json(sysd / "进度.json", {})
+    err_path = sysd / "错题本.md"
+    err_text = err_path.read_text(encoding="utf-8") if err_path.exists() else ""
+
+    rendered = {}
+    for fn in EXPORT_KINDS[kind]:
+        if fn.startswith("掌握度"):
+            rendered[fn] = _export.render_mastery(mastery, today=today)
+        elif fn.startswith("错题"):
+            rendered[fn] = _export.render_errors(err_text)
+        else:
+            rendered[fn] = _export.render_pending(mastery, progress, today=today)
+
+    out_dir = root / "导出"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for fn, md in rendered.items():
+        (out_dir / fn).write_text(md, encoding="utf-8")
+        written.append(str(out_dir / fn))
+
+    return json.dumps({"ok": True, "files": written,
+                       "markdown": "\n\n---\n\n".join(rendered.values()),
+                       "note": f"已写入 {out_dir}（同步目录指到这里，Obsidian 就能看）"},
+                      ensure_ascii=False)
+
+
 # --------------------------------------------------------------- 注册 ------
 QUIZ_SCHEMA = {
     "name": "exam_quiz",
@@ -327,6 +367,19 @@ STATUS_SCHEMA = {
     "parameters": {"type": "object", "properties": {}},
 }
 
+EXPORT_SCHEMA = {
+    "name": "exam_export",
+    "description": "把掌握度/错题本/待复习队列渲染成人读 Markdown（写进 <workspace>/导出/ 并直接返回全文）。服务器版 Hermes 用它把结果带回聊天窗口或同步进 Obsidian。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["all", "看板", "错题", "待复习"],
+                     "description": "导出哪一种，默认 all", "default": "all"},
+            "date": {"type": "string", "description": "基准日 YYYY-MM-DD，默认今天"},
+        },
+    },
+}
+
 REVIEW_SCHEMA = {
     "name": "exam_review",
     "description": "生成或合并当日错题复盘文件（<workspace>/每日错题复盘/YYYY-MM-DD.md），并写 last_session_closed。",
@@ -339,15 +392,17 @@ REVIEW_SCHEMA = {
 
 def _slash_exam(ctx, raw_args: str) -> str:
     parts = (raw_args or "").strip().split()
-    if parts and parts[0] in ("quiz", "grade", "review", "status"):
-        fn = {"quiz": exam_quiz, "grade": exam_grade,
-              "review": exam_review, "status": exam_status}[parts[0]]
+    if parts and parts[0] in ("quiz", "grade", "review", "status", "export"):
+        fn = {"quiz": exam_quiz, "grade": exam_grade, "review": exam_review,
+              "status": exam_status, "export": exam_export}[parts[0]]
         rest = parts[1:]
         if parts[0] == "quiz":
             return fn({"chapter": rest[0] if rest else "第一章",
                        "n": int(rest[1]) if len(rest) > 1 and rest[1].isdigit() else 10})
         if parts[0] == "grade":
             return fn({"answers": " ".join(rest)})
+        if parts[0] == "export":
+            return fn({"kind": rest[0] if rest else "all"})
         return fn({})
     return exam_status({})
 
@@ -365,8 +420,10 @@ def register(ctx):
                       schema=STATUS_SCHEMA, handler=lambda args, **kw: exam_status(args, ctx=ctx, **kw))
     ctx.register_tool(name="exam_review", toolset="exam_tutor",
                       schema=REVIEW_SCHEMA, handler=lambda args, **kw: exam_review(args, ctx=ctx, **kw))
+    ctx.register_tool(name="exam_export", toolset="exam_tutor",
+                      schema=EXPORT_SCHEMA, handler=lambda args, **kw: exam_export(args, ctx=ctx, **kw))
     try:
         ctx.register_command("exam", lambda raw: _slash_exam(ctx, raw),
-                             description="做题系统：/exam quiz|status|grade <答案>|review")
+                             description="做题系统：/exam quiz|status|grade <答案>|review|export")
     except Exception:
         pass

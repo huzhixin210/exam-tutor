@@ -60,3 +60,32 @@ export EXAM_TUTOR_ROOT=/path/to/workspace
 ```
 
 cron 的 prompt 里写：读 `AGENTS.md` → 按 SKILL.md 出题 → 结果推给用户。
+
+## 服务器版 Hermes：文件在服务器上，用户怎么看到
+
+服务器跑 Hermes 时 `workspace` 在服务器磁盘，用户本地看不到。四层解法，按需叠加：
+
+| 方案 | 做法 | 代价 |
+|---|---|---|
+| ① 对话内回显 | 规则强制：每次批改/复盘把内容贴进聊天，不只写文件 | 零 |
+| ② 导出人读视图 | `exam_export` / `python src/export.py` → `workspace/导出/*.md` | 零 |
+| ③ 单向同步到本地 | 只同步 `导出/` 目录（Syncthing send-only、Obsidian Git、rclone 均可） | 十分钟 |
+| ④ 服务器只读网页 | nginx 静态目录 + basic auth 指向 `导出/` | 半天 |
+
+**关键原则：只同步"人读视图"，不同步 JSON。**
+`掌握度.json`、`题库/` 是机器数据，双向同步会冲突、手改会坏；`导出/` 里的 Markdown 是纯只读镜像，
+冲突概率为零，还能直接丢进 Obsidian vault。
+
+Syncthing 推荐配法（服务器 → 本地单向）：
+
+```bash
+# 服务器
+sudo apt install syncthing && syncthing
+# 本地客户端里把共享文件夹设成 receive-only，服务器那端设成 send-only
+# 本地目标路径：桌面/教编备考/服务器数据
+```
+
+Obsidian 里把 `桌面/教编备考` 当 vault，`服务器数据/` 子目录就会自动出现，点开就是看板与错题速览。
+如果你更想用 Obsidian 插件而不是 Syncthing：用 **Obsidian Git**（服务器 cron 定时 commit+push 私有仓库，
+桌面/手机插件定时 pull），效果相同，也都是单向只读镜像；**Remotely Save** 也可以但要配 S3/WebDAV 且是
+last-write-wins，**Obsidian Sync 官方服务不支持无头 Linux 服务器端**，不要走那条路。

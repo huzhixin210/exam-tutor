@@ -11,7 +11,7 @@ hermes plugins install G:/github/exam-tutor/plugin
 hermes plugins enable exam-tutor
 ```
 
-装完重启会话，工具出现。
+装完重启会话，工具出现（5 个）。
 
 ## 四个工具
 
@@ -21,10 +21,11 @@ hermes plugins enable exam-tutor
 | `exam_grade` | 判分 + 更新掌握度（v2 计分表）+ 错题本 + 批次记录 + 进度 |
 | `exam_status` | 进度快照 + 按保持率排序的待复习队列 |
 | `exam_review` | 生成/合并当日错题复盘 |
+| `exam_export` | 导出人读 Markdown：掌握度看板 / 错题速览 / 今日待复习（写进 `<workspace>/导出/`，并直接返回全文） |
 
 配套技能 `exam-tutor:exam-tutor`（插件自带，只读）写规则：什么时候出题、怎么批改、失分模式怎么归。
 
-斜杠命令：`/exam quiz 第一章 10`、`/exam status`、`/exam grade A,B?,C`、`/exam review`。
+斜杠命令：`/exam quiz 第一章 10`、`/exam status`、`/exam grade A,B?,C`、`/exam review`、`/exam export`。
 
 ## 数据放哪
 

@@ -9,3 +9,4 @@ provides_tools:
   - exam_grade
   - exam_status
   - exam_review
+  - exam_export
