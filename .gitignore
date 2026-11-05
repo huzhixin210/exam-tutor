@@ -1,0 +1,10 @@
+# 个人数据与题库：默认全部不进仓库
+workspace/
+data/
+*.bak*
+*.bak_decay
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
