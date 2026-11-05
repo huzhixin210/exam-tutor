@@ -30,7 +30,7 @@
 
 ## 2. 验证（三条都要过）
 
-    hermes plugins list                    # exam-tutor 那行必须是 enabled
+    hermes plugins list                    # exam-tutor 那行必须是 enabled + 版本 1.1.0
     hermes plugins doctor exam-tutor       # 必须出现: registrations: 5 tool(s)
     hermes plugins validate huzhixin210/exam-tutor/plugin   # 可选，应显示 Validation passed
 
@@ -151,7 +151,7 @@
 | tool 数不是 5（0 或其他） | 注册失败/版本不符 | 发 `hermes plugins doctor` 输出；按第 9 节兜底 |
 | 装插件报 schannel | Windows + 代理 | `export GIT_SSL_BACKEND=openssl` 后重试 |
 | `repository not found` | 拼错路径或网络不通 | 路径必须 `huzhixin210/exam-tutor/plugin`；先 `git ls-remote` 测连通 |
-| 判断题不出/被跳过 | 旧版插件（≤ v1.0.0 早期）没有规范化 | `hermes plugins update exam-tutor` 升到含 `judgenorm.py` 的版本 |
+| 判断题不出/被跳过 | 插件版本 < 1.1.0（无判断题规范化） | `hermes plugins update exam-tutor`，`hermes plugins list` 应显示 1.1.0 |
 | 用户说"我打不开文件" | Hermes 在服务器上 | 按第 7.5 节：先回显，再 `exam_export` |
 
 ## 9. 兜底：不装插件也能用
