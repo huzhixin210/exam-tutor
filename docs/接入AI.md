@@ -1,6 +1,26 @@
 # 接入你的 AI
 
-## Hermes Agent
+## Hermes Agent · 插件方式（推荐）
+
+```bash
+hermes plugins install huzhixin210/exam-tutor/plugin
+hermes plugins enable exam-tutor
+```
+
+授权过 GitHub 的机器可直接装；装完重启会话，多出 `exam_quiz` / `exam_grade` / `exam_status` /
+`exam_review` 四个工具和只读技能 `exam-tutor:exam-tutor`，还会自动初始化数据目录
+（`<hermes-home>/plugin-data/exam-tutor/workspace`）。
+
+**Windows + Clash 用户注意**：`hermes plugins install` 内部用 git 克隆，schannel 偶尔报
+`server closed abruptly (missing close_notify)`。设 `GIT_SSL_BACKEND=openssl` 后重试即可。
+
+要把数据放在你自己的目录（比如桌面上的做题系统）：
+```bash
+hermes config set plugins.entries.exam-tutor.settings.root "D:/你的目录/教编备考"
+```
+或直接设环境变量 `EXAM_TUTOR_ROOT`。
+
+## Hermes Agent · 纯技能方式
 
 Hermes 的技能目录是 `~/.hermes/skills/`（Windows：`C:\Users\<你>\.hermes\skills\`）。
 不同安装方式路径可能是 `AppData/Local/hermes/skills/`，以你本机 `skill_view` 能读到的目录为准。
