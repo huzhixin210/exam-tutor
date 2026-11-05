@@ -31,13 +31,13 @@
 ## 2. 验证（三条都要过）
 
     hermes plugins list                    # exam-tutor 那行必须是 enabled + 版本 1.1.0
-    hermes plugins doctor exam-tutor       # 必须出现: registrations: 5 tool(s)
+    hermes plugins doctor exam-tutor       # 必须出现: registrations: 6 tool(s)
     hermes plugins validate huzhixin210/exam-tutor/plugin   # 可选，应显示 Validation passed
 
-关键：**五个工具（exam_quiz / exam_grade / exam_status / exam_review / exam_export）只在下一个会话才出现**，因为工具列表在会话启动时固定。所以如果本会话刚装完，请告诉用户：「装好了，开一个新会话（或重启 Hermes）工具才生效」，不要假装自己现在能调它们。
+关键：**六个工具（exam_quiz / exam_grade / exam_status / exam_review / exam_export / exam_bank_sync）只在下一个会话才出现**，因为工具列表在会话启动时固定。所以如果本会话刚装完，请告诉用户：「装好了，开一个新会话（或重启 Hermes）工具才生效」，不要假装自己现在能调它们。
 
 技能 `exam-tutor:exam-tutor` 可以立刻用 `skill_view("exam-tutor:exam-tutor")` 读到。
-如果 doctor 报的 tool 数不是 5（0 或者其他数字），说明注册失败：把 `hermes plugins doctor exam-tutor` 的完整输出发给用户看，并按第 9 节兜底。
+如果 doctor 报的 tool 数不是 6（0 或者其他数字），说明注册失败：把 `hermes plugins doctor exam-tutor` 的完整输出发给用户看，并按第 9 节兜底。
 
 ## 3. 数据目录
 
@@ -91,7 +91,11 @@
    c. 用 3-5 行汇报：分数、最弱的 2-3 个考点（看 `transitions` 里分最低的）、下次复习日。
 5. `exam_status({})` → 进度、考点数、平均掌握度、最该复习的队列。用户问「我最近学得怎么样」时用它。
 6. 一天结束调 `exam_review({})` → 生成/合并当日复盘文件。
-7. 用户要看全貌时调 `exam_export({"kind": "all"})`
+7. 如果用户给了一个题库服务器（形如 `http://1.2.3.4:9120` 和令牌），先同步题库再出题：
+   `exam_bank_sync({"dry_run": true})` 看要下什么 → `exam_bank_sync({})` 真下。
+   令牌走环境变量 `EXAM_BANK_TOKEN`，地址可以用 `hermes config set plugins.entries.exam-tutor.settings.bank_url`。
+   没配就跳过，用本地题库。
+8. 用户要看全貌时调 `exam_export({"kind": "all"})`
    → 生成三份人读 Markdown（`掌握度看板.md`、`错题速览.md`、`今日待复习.md`）到 `<workspace>/导出/`，
    并把返回的 `markdown` **节选关键几行贴进聊天**。
 
@@ -148,7 +152,7 @@
 | `没有 当前批次.json，先 exam_quiz` | 没出卷就判分 | 先 `exam_quiz` |
 | `题库里有题缺 answer` | 题目字段不全 | 补 `answer` 后再判，禁止猜 |
 | `考点「X」匹配到多个键` | 同名考点跨节重复 | 问用户考的是哪一节，禁止擅自挑 |
-| tool 数不是 5（0 或其他） | 注册失败/版本不符 | 发 `hermes plugins doctor` 输出；按第 9 节兜底 |
+| tool 数不是 6（0 或其他） | 注册失败/版本不符 | 发 `hermes plugins doctor` 输出；按第 9 节兜底 |
 | 装插件报 schannel | Windows + 代理 | `export GIT_SSL_BACKEND=openssl` 后重试 |
 | `repository not found` | 拼错路径或网络不通 | 路径必须 `huzhixin210/exam-tutor/plugin`；先 `git ls-remote` 测连通 |
 | 判断题不出/被跳过 | 插件版本 < 1.1.0（无判断题规范化） | `hermes plugins update exam-tutor`，`hermes plugins list` 应显示 1.1.0 |

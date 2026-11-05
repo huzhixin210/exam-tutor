@@ -31,6 +31,7 @@ try:
     import decay as _decay
     import export as _export
     import grade as _grade
+    import sync_bank as _sync_bank
 finally:
     try:
         sys.path.remove(str(_ENGINE))
@@ -294,6 +295,24 @@ def exam_review(args: dict, **kwargs) -> str:
                       ensure_ascii=False)
 
 
+def exam_bank_sync(args: dict, **kwargs) -> str:
+    """从题库服务器拉取题库（单向，只传 sha256 变了的文件）。"""
+    ctx = kwargs.get("ctx")
+    url = args.get("url") or (ctx.get_config("bank_url", default=None) if ctx else None) \
+        or os.environ.get("EXAM_BANK_URL")
+    token = args.get("token") or os.environ.get("EXAM_BANK_TOKEN")
+    if not url or not token:
+        return json.dumps({"ok": False,
+                           "error": "缺服务器地址或令牌：设 bank_url 配置 + EXAM_BANK_TOKEN 环境变量，"
+                                    "或直接传 url/token 参数"}, ensure_ascii=False)
+    try:
+        r = _sync_bank.sync(url, token, root=str(_root(ctx)),
+                            dry_run=bool(args.get("dry_run")), prune=bool(args.get("prune")))
+    except Exception as e:
+        return json.dumps({"ok": False, "error": f"同步失败：{e}"}, ensure_ascii=False)
+    return json.dumps({"ok": not r["failed"], **r}, ensure_ascii=False)
+
+
 EXPORT_KINDS = {"all": ("掌握度看板.md", "错题速览.md", "今日待复习.md"),
                 "看板": ("掌握度看板.md",), "错题": ("错题速览.md",), "待复习": ("今日待复习.md",)}
 
@@ -380,6 +399,19 @@ EXPORT_SCHEMA = {
     },
 }
 
+BANK_SYNC_SCHEMA = {
+    "name": "exam_bank_sync",
+    "description": "从题库服务器拉取题库到本地 workspace（只下载 sha256 变更的文件，校验后原子替换）。服务器地址取参数 url 或配置 bank_url，令牌取参数 token 或环境变量 EXAM_BANK_TOKEN。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "如 http://1.2.3.4:9120，默认用配置 bank_url"},
+            "dry_run": {"type": "boolean", "description": "只报告要下什么，不写盘", "default": False},
+            "prune": {"type": "boolean", "description": "删除本地有、服务器没有的题库文件", "default": False},
+        },
+    },
+}
+
 REVIEW_SCHEMA = {
     "name": "exam_review",
     "description": "生成或合并当日错题复盘文件（<workspace>/每日错题复盘/YYYY-MM-DD.md），并写 last_session_closed。",
@@ -392,15 +424,17 @@ REVIEW_SCHEMA = {
 
 def _slash_exam(ctx, raw_args: str) -> str:
     parts = (raw_args or "").strip().split()
-    if parts and parts[0] in ("quiz", "grade", "review", "status", "export"):
+    if parts and parts[0] in ("quiz", "grade", "review", "status", "export", "sync"):
         fn = {"quiz": exam_quiz, "grade": exam_grade, "review": exam_review,
-              "status": exam_status, "export": exam_export}[parts[0]]
+              "status": exam_status, "export": exam_export, "sync": exam_bank_sync}[parts[0]]
         rest = parts[1:]
         if parts[0] == "quiz":
             return fn({"chapter": rest[0] if rest else "第一章",
                        "n": int(rest[1]) if len(rest) > 1 and rest[1].isdigit() else 10})
         if parts[0] == "grade":
             return fn({"answers": " ".join(rest)})
+        if parts[0] == "sync":
+            return fn({"dry_run": "dry" in rest})
         if parts[0] == "export":
             return fn({"kind": rest[0] if rest else "all"})
         return fn({})
@@ -420,10 +454,12 @@ def register(ctx):
                       schema=STATUS_SCHEMA, handler=lambda args, **kw: exam_status(args, ctx=ctx, **kw))
     ctx.register_tool(name="exam_review", toolset="exam_tutor",
                       schema=REVIEW_SCHEMA, handler=lambda args, **kw: exam_review(args, ctx=ctx, **kw))
+    ctx.register_tool(name="exam_bank_sync", toolset="exam_tutor",
+                      schema=BANK_SYNC_SCHEMA, handler=lambda args, **kw: exam_bank_sync(args, ctx=ctx, **kw))
     ctx.register_tool(name="exam_export", toolset="exam_tutor",
                       schema=EXPORT_SCHEMA, handler=lambda args, **kw: exam_export(args, ctx=ctx, **kw))
     try:
         ctx.register_command("exam", lambda raw: _slash_exam(ctx, raw),
-                             description="做题系统：/exam quiz|status|grade <答案>|review|export")
+                             description="做题系统：/exam quiz|status|grade <答案>|review|export|sync")
     except Exception:
         pass

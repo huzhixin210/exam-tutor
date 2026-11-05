@@ -80,6 +80,23 @@ exam-tutor/
 
 详见 `docs/设计说明.md`。
 
+## 题库共享（可选）
+
+题库可以放在自己的服务器上，自己推、朋友拉：
+
+```bash
+# 服务器一次性安装（生成令牌 + systemd 服务）
+curl -fsSLO https://raw.githubusercontent.com/huzhixin210/exam-tutor/main/deploy/install_server.sh && sudo bash install_server.sh
+
+# 自己发布（只传 sha256 变了的文件）
+python tools/publish_bank.py --url http://<IP>:9120 --token <令牌> --dir "<题库目录>"
+
+# 朋友拉取（或用插件工具 exam_bank_sync）
+python src/sync_bank.py --url http://<IP>:9120 --token <令牌>
+```
+
+单向传输 = 服务器是唯一真源，不会产生冲突。完整说明见 [`docs/题库同步.md`](docs/题库同步.md)。
+
 ## 关于题库与版权
 
 仓库**不含任何教材真题**。`template/` 里那 12 道是作者自编的示例题（MIT 授权，随便改）。
