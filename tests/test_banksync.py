@@ -18,8 +18,9 @@ class TestManifest(unittest.TestCase):
     def test_only_json_counted(self):
         open(os.path.join(self.d, "notes.md"), "w").write("x")
         m = banksync.build_manifest(self.d)
-        self.assertEqual(m["count"], 3)
+        self.assertEqual(m["count"], 2)          # 已做.json 属个人状态，不共享
         self.assertNotIn("notes.md", m["files"])
+        self.assertNotIn("已做.json", m["files"])
 
     def test_hash_stable(self):
         m1 = banksync.build_manifest(self.d)["files"]["第一章.json"]["sha256"]
@@ -46,6 +47,20 @@ class TestManifest(unittest.TestCase):
         fetch, same, extra = banksync.diff(m, self.d)
         self.assertEqual(fetch, ["6600_第一章.json"])  # 远端有本地没有 -> 拉取
         self.assertEqual(extra, [])
+
+
+class TestPersonalState(unittest.TestCase):
+    def test_done_record_never_shared(self):
+        import banksync as b
+        self.assertFalse(b.is_safe_name("已做.json"))
+        self.assertTrue(b.is_safe_name("弃用.json"))   # 质量黑名单是共享内容
+
+    def test_manifest_skips_done_record(self):
+        d = tempfile.mkdtemp()
+        for n in ("第一章.json", "已做.json"):
+            open(os.path.join(d, n), "w", encoding="utf-8").write("{}")
+        m = banksync.build_manifest(d)
+        self.assertEqual(list(m["files"]), ["第一章.json"])
 
 
 class TestSafety(unittest.TestCase):

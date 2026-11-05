@@ -13,6 +13,11 @@ import os
 
 MANIFEST_NAME = "manifest.json"
 
+# 只共享"内容"，不共享"个人状态"：
+#   已做.json 是每个人自己的刷题记录，传过去会让别人整批跳过我做过的题
+#   弃用.json 是题目质量黑名单，对所有人一致，所以保留共享
+EXCLUDE = {"已做.json", "进度.json", "manifest.json"}
+
 
 def sha256_file(path, chunk=1 << 20):
     h = hashlib.sha256()
@@ -26,7 +31,7 @@ def sha256_file(path, chunk=1 << 20):
 
 
 def is_safe_name(name):
-    return bool(name) and name.endswith(".json") and name != MANIFEST_NAME \
+    return bool(name) and name.endswith(".json") and name not in EXCLUDE \
         and "/" not in name and "\\" not in name and ".." not in name
 
 
