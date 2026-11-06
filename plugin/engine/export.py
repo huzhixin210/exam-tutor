@@ -60,9 +60,13 @@ def render_mastery(mastery, today=None, top=None):
 ENTRY = re.compile(r"^###\s*错题\s*(\d+)（([^）]*)）", re.M)
 
 
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
 def _parse_entries(text):
     if not text:
         return []
+    text = HTML_COMMENT.sub("", text)      # 模板里的格式示例是注释，不算真错题
     marks = list(ENTRY.finditer(text))
     out = []
     for i, m in enumerate(marks):

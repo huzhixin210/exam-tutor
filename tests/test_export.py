@@ -68,5 +68,19 @@ class TestErrorBoard(unittest.TestCase):
         self.assertIn("最近错题", self.md)
         self.assertIn("未答", self.md)
 
+    def test_html_comment_example_ignored(self):
+        text = """# 错题本
+<!-- 格式示例
+### 错题1（2026-01-01 00:00）
+- **【考点标记】** 示例·考点1_这是模板示例
+-->
+### 错题7（2026-11-06 10:00）
+- **【考点标记】** 第一章第一节·考点2_真错题
+"""
+        md = export.render_errors(text)
+        self.assertNotIn("模板示例", md)
+        self.assertIn("真错题", md)
+        self.assertIn("共 1 条", md)
+
     def test_empty_book_does_not_crash(self):
         self.assertIn("错题本", export.render_errors(""))

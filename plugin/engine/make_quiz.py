@@ -204,6 +204,7 @@ def main():
 
     with open(CUR, "w", encoding="utf-8") as f:
         json.dump({"date": datetime.datetime.now().strftime("%Y-%m-%d"), "chapter": chap,
+                   "section": scope,
                    "items": [{"no": i, "id": q.get("id"), "qtype": q.get("qtype"), "answer": q.get("answer"),
                               "kp": q.get("kp"), "src": src_of[id(q)]} for i, q in enumerate(picked[:n], 1)]},
                   f, ensure_ascii=False, indent=2)
@@ -269,6 +270,7 @@ def _emit(picked, src_of, chap, done_ids, tag=""):
     print("\n".join(lines))
     with open(CUR, "w", encoding="utf-8") as f:
         json.dump({"date": datetime.datetime.now().strftime("%Y-%m-%d"), "chapter": chap,
+                   "section": None,
                    "items": [{"no": i, "id": q.get("id"), "qtype": q.get("qtype"),
                               "answer": q.get("answer"), "kp": q.get("kp"),
                               "src": src_of[id(q)]} for i, q in enumerate(picked, 1)]},

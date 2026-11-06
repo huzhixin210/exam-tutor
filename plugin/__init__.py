@@ -258,6 +258,7 @@ def exam_grade(args: dict, **kwargs) -> str:
 
     # 3) 批次记录（追加一行）
     rec = {"date": today.isoformat(), "chapter": batch.get("chapter"),
+           "section": batch.get("section"),
            "items": [{k: it.get(k) for k in ("no", "id", "answer", "kp")} for it in batch["items"]],
            "answers": ",".join(str(r["user"]) for r in results),
            "score": summary["score"]}
