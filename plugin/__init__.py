@@ -163,6 +163,31 @@ def exam_quiz(args: dict, **kwargs) -> str:
                       ensure_ascii=False)
 
 
+def exam_search(args: dict, **kwargs) -> str:
+    """按章节/关键词检索候选题目（只出题干+选项+答案，不含解析）。出题范围由模型决定，这是检索器。"""
+    root = _root(kwargs.get("ctx"))
+    chapter = str(args.get("chapter") or "").strip()
+    if not chapter:
+        return json.dumps({"ok": False, "error": "缺 chapter（如 第六章）"}, ensure_ascii=False)
+    cmd = [sys.executable, str(_ENGINE / "pick_questions.py"),
+           "--prefix", chapter, "--n", str(int(args.get("n") or 20)),
+           "--root", str(root)]
+    if args.get("kw"):
+        cmd += ["--kw", str(args["kw"])]
+    if args.get("qtype"):
+        cmd += ["--qtype", str(args["qtype"])]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=120)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": f"检索失败：{e}"}, ensure_ascii=False)
+    if out.returncode != 0:
+        return json.dumps({"ok": False, "error": (out.stderr or out.stdout)[-800:]}, ensure_ascii=False)
+    return json.dumps({"ok": True, "candidates": out.stdout.strip(),
+                       "hint": "模型自行按考点挑 9 新 + 1 复习（单选为主、多选≥2、判断≤20%、同考点≤2、不标考点），"
+                               "挑完自己写 当前批次.json，再交给用户"},
+                      ensure_ascii=False)
+
+
 def exam_grade(args: dict, **kwargs) -> str:
     ctx = kwargs.get("ctx")
     root = _root(ctx)
@@ -355,7 +380,9 @@ def exam_export(args: dict, **kwargs) -> str:
 # --------------------------------------------------------------- 注册 ------
 QUIZ_SCHEMA = {
     "name": "exam_quiz",
-    "description": "从本地题库组一份卷子（默认 9 新 + 1 复习、主教材 4 : 补充 6、多选约 25%、同考点 ≤2）。返回题干文本（不含答案），答案写入 当前批次.json。",
+    "description": "机械组卷（备用）。按章/标签抽题，默认 9 新 + 1 复习、主教材 4 : 补充 6、多选≥2、判断≤20%。"
+                   "注意：出题范围默认应由模型自己定（读学习记录→按节→exam_search 取候选→手挑），"
+                   "本工具只在用户明确要求脚本卷时使用，否则会把未学到的节混进来。",
     "parameters": {
         "type": "object",
         "properties": {
@@ -399,6 +426,21 @@ EXPORT_SCHEMA = {
     },
 }
 
+SEARCH_SCHEMA = {
+    "name": "exam_search",
+    "description": "按章节/关键词检索候选题（只返回题干+选项+答案，不含解析）。这是出题流程的检索器：模型自己决定范围（读学习记录定到节），再用它取候选，然后手挑 10 题。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "chapter": {"type": "string", "description": "章节名，与题库文件名一致，如 第六章"},
+            "kw": {"type": "string", "description": "逗号分隔的考点关键词，命中题干或选项即算"},
+            "n": {"type": "integer", "description": "候选条数，默认 20", "default": 20},
+            "qtype": {"type": "string", "enum": ["单选", "多选", "判断", "any"], "description": "只取某题型，默认 any"},
+        },
+        "required": ["chapter"],
+    },
+}
+
 BANK_SYNC_SCHEMA = {
     "name": "exam_bank_sync",
     "description": "从题库服务器拉取题库到本地 workspace（只下载 sha256 变更的文件，校验后原子替换）。服务器地址取参数 url 或配置 bank_url，令牌取参数 token 或环境变量 EXAM_BANK_TOKEN。",
@@ -424,15 +466,18 @@ REVIEW_SCHEMA = {
 
 def _slash_exam(ctx, raw_args: str) -> str:
     parts = (raw_args or "").strip().split()
-    if parts and parts[0] in ("quiz", "grade", "review", "status", "export", "sync"):
-        fn = {"quiz": exam_quiz, "grade": exam_grade, "review": exam_review,
-              "status": exam_status, "export": exam_export, "sync": exam_bank_sync}[parts[0]]
+    if parts and parts[0] in ("quiz", "grade", "review", "status", "export", "sync", "search"):
+        fn = {"quiz": exam_quiz, "grade": exam_grade, "review": exam_review, "status": exam_status,
+              "export": exam_export, "sync": exam_bank_sync, "search": exam_search}[parts[0]]
         rest = parts[1:]
         if parts[0] == "quiz":
             return fn({"chapter": rest[0] if rest else "第一章",
                        "n": int(rest[1]) if len(rest) > 1 and rest[1].isdigit() else 10})
         if parts[0] == "grade":
             return fn({"answers": " ".join(rest)})
+        if parts[0] == "search":
+            return fn({"chapter": rest[0] if rest else "第一章",
+                       "kw": " ".join(rest[1:]) or None})
         if parts[0] == "sync":
             return fn({"dry_run": "dry" in rest})
         if parts[0] == "export":
@@ -446,6 +491,8 @@ def register(ctx):
         skill_md = child / "SKILL.md"
         if child.is_dir() and skill_md.exists():
             ctx.register_skill(child.name, skill_md)
+    ctx.register_tool(name="exam_search", toolset="exam_tutor",
+                      schema=SEARCH_SCHEMA, handler=lambda args, **kw: exam_search(args, ctx=ctx, **kw))
     ctx.register_tool(name="exam_quiz", toolset="exam_tutor",
                       schema=QUIZ_SCHEMA, handler=lambda args, **kw: exam_quiz(args, ctx=ctx, **kw))
     ctx.register_tool(name="exam_grade", toolset="exam_tutor",
@@ -460,6 +507,6 @@ def register(ctx):
                       schema=EXPORT_SCHEMA, handler=lambda args, **kw: exam_export(args, ctx=ctx, **kw))
     try:
         ctx.register_command("exam", lambda raw: _slash_exam(ctx, raw),
-                             description="做题系统：/exam quiz|status|grade <答案>|review|export|sync")
+                             description="做题系统：/exam quiz|status|grade <答案>|review|export|sync|search")
     except Exception:
         pass

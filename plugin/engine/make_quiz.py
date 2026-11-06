@@ -9,8 +9,10 @@
 import json, os, re, sys, datetime, random
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import config
-import judgenorm
+import judgenorm   # 判断题 options 空 / answer √× 的规范化，漏了它整类判断题会被静默过滤
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import config                       # 数据目录：--root / EXAM_TUTOR_ROOT / ./workspace
 
 BASE = os.path.join(config.root(), "做题系统")
 QB = os.path.join(BASE, "题库")
@@ -58,9 +60,27 @@ def ok(q, done_ids, errs):
     if norm(stem)[:16] in errs: return False
     return True
 
+def read_progress():
+    """从 学习记录.md 读"出题范围：第六章 第一节"，让出题范围跟着用户的真实进度走。
+    找不到就回退到"视频：教育学第六章第一节"这行；都没有则返回 (None, None)。"""
+    p = os.path.join(os.path.dirname(BASE), "学习记录.md")
+    if not os.path.exists(p): return None, None
+    with open(p, encoding="utf-8") as f: txt = f.read()
+    pat = re.compile(r"(第[一二三四五六七八九十]+章)\s*[·、，,]?\s*(第[一二三四五六七八九十]+节)?")
+    for line in txt.splitlines():
+        if line.startswith("出题范围"):
+            m = pat.search(line)
+            if m: return m.group(1), m.group(2)
+    for line in txt.splitlines():
+        if line.startswith("视频"):
+            m = pat.search(line)
+            if m: return m.group(1), m.group(2)
+    return None, None
+
+
 def main():
     argv = [a for a in sys.argv[1:]]
-    if "--root" in argv:                      # 吃掉 --root <dir>
+    if "--root" in argv:                 # 吃掉 --root <dir>（config 自己会读）
         i = argv.index("--root")
         del argv[i:i + 2]
     special = None
@@ -68,7 +88,19 @@ def main():
         if flag in argv:
             special = flag
             argv.remove(flag)
-    chap = argv[0] if argv and not argv[0].isdigit() else "第五章"
+    scope = None
+    if "--scope" in argv:          # --scope 第一节：按"节"出题，范围用 题库/节关键词.json 定义
+        i = argv.index("--scope")
+        scope = argv[i+1] if len(argv) > i+1 else None
+        del argv[i:i+2]
+    chap = argv[0] if argv and not argv[0].isdigit() else None
+    auto_chap, auto_sec = read_progress()
+    if chap is None:
+        chap = auto_chap or "第五章"
+    if scope is None and "--全章" not in argv and auto_sec and auto_chap == chap:
+        scope = auto_sec
+        print(f"[自动范围] 学习记录.md → {chap}·{scope}（想整章出题加 --全章）")
+    if "--全章" in argv: argv.remove("--全章")
     n = int(argv[1]) if len(argv) > 1 else (int(argv[0]) if argv and argv[0].isdigit() else 10)
     if special:
         return run_special(special, n)
@@ -77,7 +109,7 @@ def main():
     n_review = 1 if n >= 10 else 0          # 冲刺档：9 新 + 1 复习（由队列取 R 最低）
     n_new = n - n_review
     n3600 = max(1, round(n_new * 0.4)); n6600 = n_new - n3600
-    n_multi = max(1, round(n_new * 0.25))
+    n_multi = max(2, round(n_new * 0.25))
 
 
     with open(DONE, encoding="utf-8") as f: done_ids = set(json.load(f).get("ids", []))
@@ -88,6 +120,32 @@ def main():
         return
     b3600 = [(q, f"{chap}.json") for q in load(f"{chap}.json") if ok(q, done_ids, errs)]
     b6600 = [(q, f"6600_{chap}.json") for q in load(f"6600_{chap}.json") if ok(q, done_ids, errs)]
+
+    if scope:                     # 按节收窄：6600 用 topic 前缀，3600 用考点关键词（题库无节字段）
+        try:
+            with open(os.path.join(QB, "节关键词.json"), encoding="utf-8") as f:
+                semap = json.load(f)
+        except Exception:
+            semap = {}
+        rec = (semap.get(chap) or {}).get(scope)
+        if not rec:
+            print(f"[缺节映射] 题库/节关键词.json 里没有 {chap}·{scope}。请补 {{topic/topics, kw}} 后再跑")
+            return
+        topics = rec.get("topics") or ([rec["topic"]] if rec.get("topic") else [])
+        kws = rec.get("kw") or []
+        if topics:
+            b6600 = [(q, s) for q, s in b6600 if any(str(q.get("topic") or "").startswith(t) for t in topics)]
+        else:
+            b6600 = []
+        def hit3600(q):
+            kp = str(q.get("kp") or "")
+            stem = str(q.get("stem") or "")
+            base = kp if kp else stem        # kp 优先；题干只在无 kp 时兜底（题干含"教学任务"等泛词会误收别的节）
+            return any(k in base for k in kws)
+        b3600 = [(q, s) for q, s in b3600 if hit3600(q)]
+        print(f"[节范围] {chap}·{scope}｜6600={'、'.join(topics) or '无'}｜候选 3600={len(b3600)} 6600={len(b6600)}")
+        if len(b3600) + len(b6600) < n_new:
+            print(f"[警告] 该节候选题不足 {n_new} 道，实际只能出 {len(b3600)+len(b6600)} 道")
 
     def order(pool):
         pool = list(pool)
@@ -104,10 +162,13 @@ def main():
 
     def take(pool, cnt, want_multi):
         got = 0
+        cap_judge = max(1, round(n * 0.2))   # 判断题封顶 20%（曾出现 10 题 4 判断、多选只剩 1 道）
         for q, src in order(pool):
             if got >= cnt: break
             is_multi = str(q.get("qtype")) == "多选"
             if want_multi != is_multi: continue
+            if str(q.get("qtype")) == "判断" and len([p for p in picked if str(p.get("qtype")) == "判断"]) >= cap_judge:
+                continue
             kp = str(q.get("kp") or "")[:12]
             if kp and kp_cnt.get(kp, 0) >= 2: continue
             if any(q["id"] == p["id"] for p in picked): continue
